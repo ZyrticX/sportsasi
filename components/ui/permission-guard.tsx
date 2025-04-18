@@ -10,6 +10,8 @@ interface PermissionGuardProps {
 export function PermissionGuard({ permission, fallback = null, children }: PermissionGuardProps) {
   // במצב פיתוח, נאפשר גישה לכל ההרשאות
   const isDevelopment = process.env.NODE_ENV === "development"
+
+  // בדיקת הרשאה - בפיתוח תמיד מאשרים, בייצור בודקים את ההרשאה
   const hasPermission = isDevelopment || permissionService.hasPermission(permission)
 
   if (!hasPermission) {

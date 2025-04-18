@@ -75,9 +75,9 @@ export class PermissionService {
       // המרת התפקיד למבנה הנכון
       let role: UserRole
       if (!data || !data.role || !Object.values(UserRole).includes(data.role as UserRole)) {
-        // אם אין תפקיד או שהתפקיד לא תקין, נגדיר כמנהל לצורך פיתוח
-        role = UserRole.ADMIN
-        console.warn(`User ${userId} has no valid role, defaulting to ADMIN for development`)
+        // אם אין תפקיד או שהתפקיד לא תקין, נגדיר כמשתמש רגיל
+        role = UserRole.USER
+        console.warn(`User ${userId} has no valid role, defaulting to USER`)
       } else {
         role = data.role as UserRole
       }
@@ -97,6 +97,12 @@ export class PermissionService {
   }
 
   public hasPermission(permission: Permission): boolean {
+    // בסביבת פיתוח, נאפשר גישה לכל ההרשאות
+    if (process.env.NODE_ENV === "development") {
+      return true
+    }
+
+    // בסביבת ייצור, נבדוק אם יש למשתמש את ההרשאה
     return this.userPermissions.has(permission)
   }
 
@@ -142,6 +148,15 @@ export class PermissionService {
       this.userRole = UserRole.USER
       this.userPermissions = new Set(rolePermissions[UserRole.USER])
     }
+  }
+
+  public setUserPermissions(permissions: Set<Permission>): void {
+    this.userPermissions = permissions
+  }
+
+  // הוסף גם פונקציה לקבלת ההרשאות הנוכחיות
+  public getUserPermissions(): Permission[] {
+    return Array.from(this.userPermissions)
   }
 }
 

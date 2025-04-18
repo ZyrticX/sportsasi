@@ -9,6 +9,7 @@ import { PermissionGuard } from "@/components/ui/permission-guard"
 import { Permission } from "@/lib/permissions"
 import { getSupabaseClient } from "@/lib/supabase"
 import { updateWeeklyGamesAction } from "@/app/actions/weekly-games-actions"
+import { permissionService } from "@/lib/permissions"
 
 interface WeeklyGame {
   id: string
@@ -51,6 +52,19 @@ export default function WeeklyGamesEditor({ currentWeek }: WeeklyGamesEditorProp
     day: "sunday",
     searchTerm: "",
   })
+  const [isAdmin, setIsAdmin] = useState(false) // Assuming you have a way to determine if the user is an admin
+
+  useEffect(() => {
+    // אתחול הרשאות ברירת מחדל
+    permissionService.initializeDefaultPermissions()
+
+    // אם המשתמש הוא מנהל, נוודא שיש לו הרשאת עריכת משחקים
+    if (isAdmin) {
+      const userPermissions = new Set(permissionService.getUserPermissions())
+      userPermissions.add(Permission.EDIT_GAMES)
+      permissionService.setUserPermissions(userPermissions)
+    }
+  }, [isAdmin])
 
   // טעינת כל המשחקים הזמינים
   useEffect(() => {
