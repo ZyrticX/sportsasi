@@ -253,6 +253,8 @@ export default function WeeklyGamesEditor({ currentWeek }: WeeklyGamesEditorProp
     }))
   }
 
+  // עדכון הפונקציה saveWeeklyGames כדי לוודא שהיא מעדכנת את ה-state המקומי בצורה נכונה
+
   // שמירת המשחקים השבועיים באמצעות פעולת שרת
   const saveWeeklyGames = async () => {
     setSaving(true)
@@ -260,11 +262,21 @@ export default function WeeklyGamesEditor({ currentWeek }: WeeklyGamesEditorProp
     setSuccess(null)
 
     try {
+      console.log("Saving weekly games", {
+        day: activeDay,
+        week: currentWeek,
+        gamesCount: weeklyGames[activeDay].length,
+        games: weeklyGames[activeDay],
+      })
+
       // שימוש בפעולת השרת במקום בשירות המשחקים
       const result = await updateWeeklyGamesAction(currentWeek, activeDay, weeklyGames[activeDay])
 
       if (result.success) {
         setSuccess(`המשחקים ל${getDayName(activeDay)} נשמרו בהצלחה`)
+
+        // טעינה מחדש של המשחקים מהשרת
+        await loadWeeklyGames()
       } else {
         throw new Error(result.message || "לא ניתן היה לשמור את המשחקים")
       }
@@ -280,6 +292,68 @@ export default function WeeklyGamesEditor({ currentWeek }: WeeklyGamesEditorProp
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  // טעינת המשחקים השבועיים מהשרת
+  const loadWeeklyGames = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        throw new Error("Supabase client is not available")
+      }
+
+      // טעינת המשחקים השבועיים הקיימים
+      const { data: weeklyData, error: weeklyError } = await supabase
+        .from("weekly_games")
+        .select("*")
+        .eq("week", currentWeek)
+
+      if (weeklyError) {
+        console.error("Error fetching weekly games:", weeklyError)
+        // אם יש שגיאה, נמשיך עם מערך ריק
+      } else if (weeklyData && weeklyData.length > 0) {
+        // ארגון המשחקים לפי ימים
+        const gamesByDay: Record<string, WeeklyGame[]> = {
+          sunday: [],
+          monday: [],
+          tuesday: [],
+          wednesday: [],
+          thursday: [],
+          friday: [],
+          saturday: [],
+        }
+
+        // עיבוד הנתונים מהמבנה החדש
+        weeklyData.forEach((record) => {
+          const day = record.day
+          if (gamesByDay[day] && record.games && Array.isArray(record.games)) {
+            // הוספת המשחקים מהמערך games לתוך המערך המתאים ליום
+            gamesByDay[day] = record.games.map((game) => ({
+              ...game,
+              day,
+              week: currentWeek,
+            }))
+          }
+        })
+
+        setWeeklyGames(gamesByDay)
+      }
+    } catch (err) {
+      console.error("Error loading weekly games:", err)
+      setError({
+        code: "LOAD_WEEKLY_GAMES_ERROR",
+        message: err instanceof Error ? err.message : "שגיאה לא ידועה בטעינת המשחקים השבועיים",
+        severity: ErrorSeverity.ERROR,
+        timestamp: new Date(),
+        context: { currentWeek },
+        retry: loadWeeklyGames,
+      })
+    } finally {
+      setLoading(false)
     }
   }
 

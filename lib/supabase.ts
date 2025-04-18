@@ -46,28 +46,42 @@ export const getSupabaseClient = () => {
   }
 }
 
-/**
- * יוצר ומחזיר לקוח Supabase לשימוש בצד השרת
- * לקוח זה עוקף את מדיניות ה-RLS
- */
+// הוספת לוגים מפורטים לפונקציה createServerSupabaseClient
 export const createServerSupabaseClient = () => {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  console.log("Creating server Supabase client")
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Missing Supabase environment variables")
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    console.log("Supabase URL exists:", !!supabaseUrl)
+    console.log("Supabase Key exists:", !!supabaseKey)
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing Supabase environment variables")
+      throw new Error("Missing Supabase environment variables")
+    }
+
+    // וודא שה-URL תקין
+    const formattedUrl = supabaseUrl.startsWith("http") ? supabaseUrl : `https://${supabaseUrl}`
+    console.log("Formatted URL:", formattedUrl.substring(0, 10) + "...")
+
+    const client = createClient(formattedUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
+
+    console.log("Supabase client created successfully")
+    return client
+  } catch (error) {
+    console.error("Error creating server Supabase client:", error)
+    return null
   }
-
-  // וודא שה-URL תקין
-  const formattedUrl = supabaseUrl.startsWith("http") ? supabaseUrl : `https://${supabaseUrl}`
-
-  return createClient(formattedUrl, supabaseKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  })
 }
 
 /**

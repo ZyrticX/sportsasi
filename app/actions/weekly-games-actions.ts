@@ -20,13 +20,23 @@ interface WeeklyGame {
  * פעולה זו מתבצעת בצד השרת ועוקפת את מדיניות ה-RLS
  */
 export async function updateWeeklyGamesAction(week: number, day: string, games: WeeklyGame[]) {
+  console.log("Starting updateWeeklyGamesAction", { week, day, gamesCount: games.length })
+
   try {
     // יצירת לקוח סופאבייס בצד השרת (עם הרשאות מלאות)
+    console.log("Creating server Supabase client")
     const supabase = createServerSupabaseClient()
 
-    // הכנת מערך המשחקים לשמירה
+    if (!supabase) {
+      console.error("Failed to create Supabase client")
+      throw new Error("Supabase client is not available")
+    }
+
+    console.log("Supabase client created successfully")
+
+    // הכנת מערך המשחקים לשמירה - וודא שכל משחק מקבל מזהה ייחודי
     const gamesArray = games.map((game) => ({
-      id: game.id || `temp_${Date.now()}`,
+      id: game.id.startsWith("temp_") ? `new_${Date.now()}_${Math.random().toString(36).substring(2, 9)}` : game.id,
       game_id: game.game_id,
       hometeam: game.hometeam,
       awayteam: game.awayteam,
@@ -36,72 +46,63 @@ export async function updateWeeklyGamesAction(week: number, day: string, games: 
       manuallylocked: game.manuallylocked || false,
     }))
 
-    // ננסה להשתמש בפונקציה החדשה שעוקפת את כל מדיניות ה-RLS
-    const { data, error } = await supabase.rpc("direct_update_weekly_games", {
-      p_week: week,
-      p_day: day,
-      p_games: gamesArray,
-    })
+    console.log("Games array prepared", { gamesCount: gamesArray.length, firstGame: gamesArray[0] || "No games" })
 
-    if (error) {
-      // אם יש שגיאה בקריאה ל-RPC, ננסה לעדכן ישירות את הטבלה
-      console.error("Error using direct_update_weekly_games, trying fallback method:", error)
+    // בדיקה אם כבר קיימת רשומה ליום ושבוע זה
+    console.log("Checking if record exists for week and day")
+    const { data: existingData, error: existingError } = await supabase
+      .from("weekly_games")
+      .select("id")
+      .eq("week", week)
+      .eq("day", day)
+      .maybeSingle()
 
-      // ננסה להשתמש בפונקציה הקודמת
-      const { data: rpcData, error: rpcError } = await supabase.rpc("update_weekly_games_bypass_rls", {
-        p_week: week,
-        p_day: day,
-        p_games: gamesArray,
+    if (existingError) {
+      console.error("Error checking existing weekly games:", existingError)
+      throw new Error(`Error checking existing weekly games: ${existingError.message}`)
+    }
+
+    if (existingData) {
+      // עדכון רשומה קיימת - שימוש בעדכון ישיר לטבלה
+      console.log("Record exists, updating existing record", { recordId: existingData.id })
+      const { error: updateError } = await supabase
+        .from("weekly_games")
+        .update({
+          games: gamesArray,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingData.id)
+
+      if (updateError) {
+        console.error("Error updating weekly games:", updateError)
+        throw new Error(`Error updating weekly games: ${updateError.message}`)
+      }
+
+      console.log("Successfully updated existing record")
+    } else {
+      // יצירת רשומה חדשה
+      console.log("Record does not exist, creating new record")
+      const { error: insertError } = await supabase.from("weekly_games").insert({
+        week,
+        day,
+        games: gamesArray,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
 
-      if (rpcError) {
-        console.error("Error using update_weekly_games_bypass_rls, trying direct update:", rpcError)
-
-        // בדיקה אם כבר קיימת רשומה ליום ושבוע זה
-        const { data: existingData, error: existingError } = await supabase
-          .from("weekly_games")
-          .select("id")
-          .eq("week", week)
-          .eq("day", day)
-          .maybeSingle()
-
-        if (existingError) {
-          throw new Error(`Error checking existing weekly games: ${existingError.message}`)
-        }
-
-        if (existingData) {
-          // עדכון רשומה קיימת
-          const { error: updateError } = await supabase
-            .from("weekly_games")
-            .update({
-              games: gamesArray,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existingData.id)
-
-          if (updateError) {
-            throw new Error(`Error updating weekly games: ${updateError.message}`)
-          }
-        } else {
-          // יצירת רשומה חדשה
-          const { error: insertError } = await supabase.from("weekly_games").insert({
-            week,
-            day,
-            games: gamesArray,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-
-          if (insertError) {
-            throw new Error(`Error inserting weekly games: ${insertError.message}`)
-          }
-        }
+      if (insertError) {
+        console.error("Error inserting weekly games:", insertError)
+        throw new Error(`Error inserting weekly games: ${insertError.message}`)
       }
+
+      console.log("Successfully created new record")
     }
 
     // רענון הדף
+    console.log("Revalidating path: /admin-data-access")
     revalidatePath("/admin-data-access")
 
+    console.log("Weekly games update completed successfully")
     return { success: true, message: "המשחקים השבועיים עודכנו בהצלחה" }
   } catch (error) {
     console.error("Error in updateWeeklyGamesAction:", error)
@@ -112,7 +113,7 @@ export async function updateWeeklyGamesAction(week: number, day: string, games: 
       message: error instanceof Error ? error.message : "שגיאה לא ידועה בעדכון המשחקים השבועיים",
       severity: ErrorSeverity.ERROR,
       timestamp: new Date(),
-      context: { week, day, games },
+      context: { week, day, gamesCount: games.length },
     })
 
     return {
