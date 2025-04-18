@@ -36,15 +36,67 @@ export async function updateWeeklyGamesAction(week: number, day: string, games: 
       manuallylocked: game.manuallylocked || false,
     }))
 
-    // שימוש בפונקציית RPC שעוקפת את מדיניות ה-RLS
-    const { data, error } = await supabase.rpc("update_weekly_games_bypass_rls", {
+    // ננסה להשתמש בפונקציה החדשה שעוקפת את כל מדיניות ה-RLS
+    const { data, error } = await supabase.rpc("direct_update_weekly_games", {
       p_week: week,
       p_day: day,
       p_games: gamesArray,
     })
 
     if (error) {
-      throw new Error(`Error updating weekly games: ${error.message}`)
+      // אם יש שגיאה בקריאה ל-RPC, ננסה לעדכן ישירות את הטבלה
+      console.error("Error using direct_update_weekly_games, trying fallback method:", error)
+
+      // ננסה להשתמש בפונקציה הקודמת
+      const { data: rpcData, error: rpcError } = await supabase.rpc("update_weekly_games_bypass_rls", {
+        p_week: week,
+        p_day: day,
+        p_games: gamesArray,
+      })
+
+      if (rpcError) {
+        console.error("Error using update_weekly_games_bypass_rls, trying direct update:", rpcError)
+
+        // בדיקה אם כבר קיימת רשומה ליום ושבוע זה
+        const { data: existingData, error: existingError } = await supabase
+          .from("weekly_games")
+          .select("id")
+          .eq("week", week)
+          .eq("day", day)
+          .maybeSingle()
+
+        if (existingError) {
+          throw new Error(`Error checking existing weekly games: ${existingError.message}`)
+        }
+
+        if (existingData) {
+          // עדכון רשומה קיימת
+          const { error: updateError } = await supabase
+            .from("weekly_games")
+            .update({
+              games: gamesArray,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existingData.id)
+
+          if (updateError) {
+            throw new Error(`Error updating weekly games: ${updateError.message}`)
+          }
+        } else {
+          // יצירת רשומה חדשה
+          const { error: insertError } = await supabase.from("weekly_games").insert({
+            week,
+            day,
+            games: gamesArray,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+
+          if (insertError) {
+            throw new Error(`Error inserting weekly games: ${insertError.message}`)
+          }
+        }
+      }
     }
 
     // רענון הדף

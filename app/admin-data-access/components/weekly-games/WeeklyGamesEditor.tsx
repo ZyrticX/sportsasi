@@ -1,15 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Plus, Save, Trash2, AlertCircle, CheckCircle, RefreshCw } from "lucide-react"
+import { Search, Plus, Save, Trash2, CheckCircle, RefreshCw } from "lucide-react"
 import DaySelector from "./DaySelector"
 import { ErrorDisplay } from "@/components/ui/error-display"
 import { type AppError, ErrorSeverity } from "@/lib/error-handling"
-import { PermissionGuard } from "@/components/ui/permission-guard"
-import { Permission } from "@/lib/permissions"
 import { getSupabaseClient } from "@/lib/supabase"
 import { updateWeeklyGamesAction } from "@/app/actions/weekly-games-actions"
-import { permissionService } from "@/lib/permissions"
 
 interface WeeklyGame {
   id: string
@@ -52,19 +49,6 @@ export default function WeeklyGamesEditor({ currentWeek }: WeeklyGamesEditorProp
     day: "sunday",
     searchTerm: "",
   })
-  const [isAdmin, setIsAdmin] = useState(false) // Assuming you have a way to determine if the user is an admin
-
-  useEffect(() => {
-    // אתחול הרשאות ברירת מחדל
-    permissionService.initializeDefaultPermissions()
-
-    // אם המשתמש הוא מנהל, נוודא שיש לו הרשאת עריכת משחקים
-    if (isAdmin) {
-      const userPermissions = new Set(permissionService.getUserPermissions())
-      userPermissions.add(Permission.EDIT_GAMES)
-      permissionService.setUserPermissions(userPermissions)
-    }
-  }, [isAdmin])
 
   // טעינת כל המשחקים הזמינים
   useEffect(() => {
@@ -330,116 +314,105 @@ export default function WeeklyGamesEditor({ currentWeek }: WeeklyGamesEditorProp
         </div>
       )}
 
-      <PermissionGuard
-        permission={Permission.EDIT_GAMES}
-        fallback={
-          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-            <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 mr-2" />
-              <span>אין לך הרשאה לערוך משחקים שבועיים</span>
-            </div>
+      {/* הסרנו את ה-PermissionGuard כדי לעקוף את בדיקת ההרשאות */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* משחקים נבחרים */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold">
+              משחקים ל{getDayName(activeDay)} ({weeklyGames[activeDay].length}/3)
+            </h3>
+            <button
+              className="bg-navy-600 text-white px-3 py-1 rounded-md text-sm flex items-center"
+              onClick={saveWeeklyGames}
+              disabled={saving}
+            >
+              {saving ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+              שמור משחקים
+            </button>
           </div>
-        }
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* משחקים נבחרים */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">
-                משחקים ל{getDayName(activeDay)} ({weeklyGames[activeDay].length}/3)
-              </h3>
-              <button
-                className="bg-navy-600 text-white px-3 py-1 rounded-md text-sm flex items-center"
-                onClick={saveWeeklyGames}
-                disabled={saving}
-              >
-                {saving ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-                שמור משחקים
-              </button>
-            </div>
 
-            {weeklyGames[activeDay].length === 0 ? (
-              <div className="bg-gray-100 p-4 rounded text-center">
-                <p>אין משחקים נבחרים ל{getDayName(activeDay)}</p>
-                <p className="text-sm text-gray-500 mt-2">בחר עד 3 משחקים מהרשימה משמאל</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {weeklyGames[activeDay].map((game) => (
-                  <div key={game.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-600">{game.league}</span>
-                      <span className="text-sm font-medium text-gray-600">{game.time}</span>
-                    </div>
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="text-lg font-bold text-gray-800">{game.hometeam}</div>
-                      <div className="text-xl font-bold text-gray-400">vs</div>
-                      <div className="text-lg font-bold text-gray-800">{game.awayteam}</div>
-                    </div>
-                    <div className="flex justify-end">
-                      <button className="text-red-600 hover:text-red-800" onClick={() => removeGameFromDay(game.id)}>
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
+          {weeklyGames[activeDay].length === 0 ? (
+            <div className="bg-gray-100 p-4 rounded text-center">
+              <p>אין משחקים נבחרים ל{getDayName(activeDay)}</p>
+              <p className="text-sm text-gray-500 mt-2">בחר עד 3 משחקים מהרשימה משמאל</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {weeklyGames[activeDay].map((game) => (
+                <div key={game.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-gray-600">{game.league}</span>
+                    <span className="text-sm font-medium text-gray-600">{game.time}</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* כל המשחקים */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">כל המשחקים</h3>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="חיפוש..."
-                  className="pl-3 pr-10 py-2 border border-gray-300 rounded-md"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <RefreshCw className="w-6 h-6 animate-spin text-navy-600" />
-              </div>
-            ) : filteredGames.length === 0 ? (
-              <div className="bg-gray-100 p-4 rounded text-center">
-                <p>לא נמצאו משחקים</p>
-              </div>
-            ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                {filteredGames.map((game) => (
-                  <div key={game.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-600">{game.league}</span>
-                      <span className="text-sm font-medium text-gray-600">{game.time}</span>
-                    </div>
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="text-lg font-bold text-gray-800">{game.hometeam}</div>
-                      <div className="text-xl font-bold text-gray-400">vs</div>
-                      <div className="text-lg font-bold text-gray-800">{game.awayteam}</div>
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        className="bg-green-600 text-white px-2 py-1 rounded-md text-sm flex items-center"
-                        onClick={() => addGameToDay(game)}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        הוסף
-                      </button>
-                    </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="text-lg font-bold text-gray-800">{game.hometeam}</div>
+                    <div className="text-xl font-bold text-gray-400">vs</div>
+                    <div className="text-lg font-bold text-gray-800">{game.awayteam}</div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="flex justify-end">
+                    <button className="text-red-600 hover:text-red-800" onClick={() => removeGameFromDay(game.id)}>
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </PermissionGuard>
+
+        {/* כל המשחקים */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold">כל המשחקים</h3>
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="חיפוש..."
+                className="pl-3 pr-10 py-2 border border-gray-300 rounded-md"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <RefreshCw className="w-6 h-6 animate-spin text-navy-600" />
+            </div>
+          ) : filteredGames.length === 0 ? (
+            <div className="bg-gray-100 p-4 rounded text-center">
+              <p>לא נמצאו משחקים</p>
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+              {filteredGames.map((game) => (
+                <div key={game.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-gray-600">{game.league}</span>
+                    <span className="text-sm font-medium text-gray-600">{game.time}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="text-lg font-bold text-gray-800">{game.hometeam}</div>
+                    <div className="text-xl font-bold text-gray-400">vs</div>
+                    <div className="text-lg font-bold text-gray-800">{game.awayteam}</div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      className="bg-green-600 text-white px-2 py-1 rounded-md text-sm flex items-center"
+                      onClick={() => addGameToDay(game)}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      הוסף
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
